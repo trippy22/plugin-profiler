@@ -194,14 +194,14 @@ final class OwnershipIndex
         if (!name.isEmpty()) { aliases.merge(name, id, (a, b) -> a.equals(b) ? a : AMBIGUOUS); }
     }
 
-    Observation observe(StackTraceElement[] stack, Learned learned)
+    Observation observe(ClientThreadStack stack, Learned learned)
     {
         List<Candidate> seen = new ArrayList<>();
         int lastCandidate = -1;
         int lastAlias = -1;
-        for (int i = 0; i < stack.length; i++)
+        for (int i = 0; i < stack.size(); i++)
         {
-            String name = stack[i].getClassName();
+            String name = stack.classNameAt(i);
             int nested = name.indexOf('$');
             if (nested >= 0) { name = name.substring(0, nested); }
             if (!eligibleClass(name)) { continue; }
@@ -293,13 +293,13 @@ final class OwnershipIndex
 
     private static String normalize(String name) { return name.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", ""); }
 
-    private static String path(StackTraceElement[] stack, int caller)
+    private static String path(ClientThreadStack stack, int caller)
     {
         List<String> parts = new ArrayList<>();
         for (int i = caller; i >= 0; i--)
         {
             if (caller > 5 && i == caller - 2) { parts.add("…"); i = 2; }
-            parts.add(stack[i].getClassName() + "." + stack[i].getMethodName());
+            parts.add(stack.frameNameAt(i));
         }
         return String.join(" → ", parts);
     }

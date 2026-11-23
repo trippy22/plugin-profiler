@@ -12,7 +12,7 @@ public class SampleHistoryTest
         return new OwnershipIndex(List.of(OwnershipIndexTest.owner(1, "Alpha", null), OwnershipIndexTest.owner(2, "Beta", null)));
     }
 
-    static StackTraceElement[] hit(int id)
+    static ClientThreadStack hit(int id)
     {
         return OwnershipIndexTest.stack(id == 0 ? "aq" : id == 1 ? "demo.AlphaPlugin" : "demo.BetaPlugin");
     }

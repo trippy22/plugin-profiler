@@ -123,7 +123,7 @@ final class SampleHistory
     private long total;
 
     // Owned by the sampler worker. Snapshots are handed to Swing after construction.
-    void record(long time, OwnershipIndex roster, StackTraceElement[] stack)
+    void record(long time, OwnershipIndex roster, ClientThreadStack stack)
     {
         OwnershipIndex.Observation observation = roster.observe(stack, learned);
         Shot shot = new Shot(time, observation);

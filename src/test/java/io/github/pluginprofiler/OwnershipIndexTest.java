@@ -16,9 +16,12 @@ public class OwnershipIndexTest
         return new OwnershipIndex.Owner(id, name, group, true);
     }
 
-    static StackTraceElement[] stack(String... names)
+    static ClientThreadStack stack(String... names)
     {
-        return Arrays.stream(names).map(n -> new StackTraceElement(n, "work", null, -1)).toArray(StackTraceElement[]::new);
+        StackTraceElement[] frames = Arrays.stream(names)
+            .map(name -> new StackTraceElement(name, "work", null, -1))
+            .toArray(StackTraceElement[]::new);
+        return new ClientThreadStack(frames);
     }
 
     @Test public void equivalentRostersShareCounterKeysWithoutMergingDifferentAttributionEvidence()
@@ -110,6 +113,12 @@ public class OwnershipIndexTest
         assertFalse(s.session.containsKey(1));
     }
 
+    @Test public void missingAndUnstartedThreadsYieldEmptySamples()
+    {
+        assertEquals(0, ClientThreadStack.read(null).size());
+        assertEquals(0, ClientThreadStack.read(new Thread()).size());
+    }
+
     @Test public void runtimeSampleRecognizesANamedCaller() throws Exception
     {
         CompletableFuture<Void> entered = new CompletableFuture<>();
@@ -121,7 +130,7 @@ public class OwnershipIndexTest
             entered.get(5, TimeUnit.SECONDS);
             OwnershipIndex index = new OwnershipIndex(List.of(owner(7, "Demo Sampling", null)));
             OwnershipIndex.Learned learned = new OwnershipIndex.Learned();
-            OwnershipIndex.Observation observation = index.observe(worker.getStackTrace(), learned);
+            OwnershipIndex.Observation observation = index.observe(ClientThreadStack.read(worker), learned);
             assertEquals(7, observation.signature.resolve(learned).id);
             assertTrue(observation.path.contains("DemoSamplingPlugin.hold"));
         }

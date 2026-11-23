@@ -295,11 +295,10 @@ public class ProfilerPlugin extends Plugin
         try
         {
             OwnershipIndex index = session.index;
-            Thread thread = client.getClientThread();
             long start = System.nanoTime();
-            StackTraceElement[] stack = thread == null ? null : thread.getStackTrace();
+            ClientThreadStack stack = ClientThreadStack.capture(client);
             long now = System.nanoTime();
-            if (stack != null && stack.length != 0 && index == session.index)
+            if (stack.size() != 0 && index == session.index)
             {
                 session.history.record(start + (now - start) / 2, index, stack);
             }
