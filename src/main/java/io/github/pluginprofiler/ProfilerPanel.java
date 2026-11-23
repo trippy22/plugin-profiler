@@ -2,28 +2,20 @@ package io.github.pluginprofiler;
 
 import java.awt.BorderLayout;
 import java.awt.Component;
-import java.awt.event.ActionEvent;
-import java.awt.event.KeyEvent;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
-import java.util.function.BiConsumer;
 import java.util.function.Consumer;
-import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
-import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
-import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.RowFilter;
 import javax.swing.RowSorter;
@@ -31,7 +23,6 @@ import javax.swing.SortOrder;
 import javax.swing.SwingConstants;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
-import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumn;
 import javax.swing.table.TableRowSorter;
 import net.runelite.client.ui.PluginPanel;
@@ -73,13 +64,11 @@ final class ProfilerPanel extends PluginPanel
     };
     private final JTextArea suggestion = textArea();
     private final JTextArea message = textArea();
-    private final BiConsumer<Integer, Boolean> toggle;
     private SampleHistory.Snapshot snapshot = new SampleHistory.Snapshot(Collections.emptyMap(), 0);
 
-    ProfilerPanel(BiConsumer<Integer, Boolean> toggle, boolean hideInitially, Consumer<Boolean> saveHideZero)
+    ProfilerPanel(boolean hideInitially, Consumer<Boolean> saveHideZero)
     {
         super(false);
-        this.toggle = toggle;
         setLayout(new BorderLayout(0, 5));
         setBorder(BorderFactory.createEmptyBorder(6, 5, 5, 5));
         JPanel header = new JPanel();
@@ -111,7 +100,7 @@ final class ProfilerPanel extends PluginPanel
         table.removeColumn(table.getColumnModel().getColumn(3));
         sortMetric(SortOrder.DESCENDING);
         fitHeader(1, "Share %");
-        fitHeader(2, "On");
+        fitHeader(2, "Status");
         table.setDefaultRenderer(Double.class, new DefaultTableCellRenderer()
         {
             @Override protected void setValue(Object value)
@@ -120,12 +109,13 @@ final class ProfilerPanel extends PluginPanel
                 setText(value == null ? "—" : String.format(Locale.ROOT, "%.1f", (Double) value));
             }
         });
-        TableCellRenderer check = table.getDefaultRenderer(Boolean.class);
-        table.getColumnModel().getColumn(2).setCellRenderer((t, value, selected, focus, row, col) ->
+        table.getColumnModel().getColumn(2).setCellRenderer(new DefaultTableCellRenderer()
         {
-            Component box = check.getTableCellRendererComponent(t, value, selected, focus, row, col);
-            box.setEnabled(!entryAt(row).hidden);
-            return box;
+            @Override protected void setValue(Object value)
+            {
+                setHorizontalAlignment(SwingConstants.CENTER);
+                setText(Boolean.TRUE.equals(value) ? "On" : "Off");
+            }
         });
         JScrollPane list = new JScrollPane(table);
         add(list, BorderLayout.CENTER);
@@ -141,33 +131,6 @@ final class ProfilerPanel extends PluginPanel
             refreshMetrics();
         });
 
-        table.addMouseListener(new MouseAdapter()
-        {
-            private int pressed = -1;
-
-            @Override public void mousePressed(MouseEvent event)
-            {
-                pressed = toggleAt(event);
-            }
-            @Override public void mouseReleased(MouseEvent event)
-            {
-                int released = toggleAt(event);
-                if (released != -1 && released == pressed)
-                {
-                    switchEntry(entryAt(table.rowAtPoint(event.getPoint())));
-                }
-                pressed = -1;
-            }
-        });
-        table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
-            .put(KeyStroke.getKeyStroke(KeyEvent.VK_SPACE, 0), "switchPlugin");
-        table.getActionMap().put("switchPlugin", new AbstractAction()
-        {
-            @Override public void actionPerformed(ActionEvent e)
-            {
-                if (table.getSelectedRow() >= 0) { switchEntry(entryAt(table.getSelectedRow())); }
-            }
-        });
         setHideZero(hideInitially);
         describeMetric();
     }
@@ -206,22 +169,6 @@ final class ProfilerPanel extends PluginPanel
         } : null);
     }
 
-    private int toggleAt(MouseEvent e)
-    {
-        int view = table.rowAtPoint(e.getPoint());
-        return e.getButton() == MouseEvent.BUTTON1 && view >= 0 && table.columnAtPoint(e.getPoint()) == 2
-            ? entryAt(view).id : -1;
-    }
-
-    private void switchEntry(ProfilerPlugin.Entry entry)
-    {
-        if (!entry.hidden)
-        {
-            message.setVisible(false);
-            toggle.accept(entry.id, !entry.enabled);
-        }
-    }
-
     private void sortMetric(SortOrder order)
     {
         List<RowSorter.SortKey> keys = new ArrayList<>();
@@ -241,14 +188,10 @@ final class ProfilerPanel extends PluginPanel
         return area;
     }
 
-    private ProfilerPlugin.Entry entryAt(int view)
-    {
-        return rows.get(table.convertRowIndexToModel(view));
-    }
-
     private int selectedId()
     {
-        return table.getSelectedRow() < 0 ? -1 : entryAt(table.getSelectedRow()).id;
+        int selected = table.getSelectedRow();
+        return selected < 0 ? -1 : rows.get(table.convertRowIndexToModel(selected)).id;
     }
 
     void setRoster(List<ProfilerPlugin.Entry> entries)
@@ -318,7 +261,7 @@ final class ProfilerPanel extends PluginPanel
     {
         @Override public int getRowCount() { return rows.size(); }
         @Override public int getColumnCount() { return 4; }
-        @Override public String getColumnName(int col) { return col == 0 ? "Plugin" : col == 1 ? "Share %" : col == 2 ? "On" : "Running"; }
+        @Override public String getColumnName(int col) { return col == 0 ? "Plugin" : col == 1 ? "Share %" : col == 2 ? "Status" : "Running"; }
         @Override public Class<?> getColumnClass(int col) { return col == 0 ? String.class : col == 1 ? Double.class : Boolean.class; }
         @Override public Object getValueAt(int row, int col)
         {

@@ -1,6 +1,6 @@
 # Plugin Profiler
 
-A RuneLite sidebar for ranking plugins while you play. Click a column header to sort or a plugin name to select its row. Click **On** or press Space to toggle the selected plugin. RuneLite’s Configuration and Jagex Auth controls are read-only.
+A RuneLite sidebar for ranking plugins by sampled main-thread activity while you play. Click a column header to sort. The **Status** column shows **On** or **Off**. To enable or disable a plugin, use RuneLite’s plugin settings.
 
 ## Build and run
 

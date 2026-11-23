@@ -3,13 +3,13 @@ package io.github.pluginprofiler;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.BorderLayout;
-import java.awt.event.ActionEvent;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import javax.swing.JComboBox;
 import javax.swing.JCheckBox;
+import javax.swing.JLabel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTable;
@@ -19,18 +19,13 @@ import static org.junit.Assert.*;
 
 public class ProfilerPanelTest
 {
-    @Test public void selectionAndToggleFollowTheSamePluginThroughLiveSortAndRosterRefresh() throws Exception
+    @Test public void selectionFollowsTheSamePluginThroughLiveSortAndRosterRefresh() throws Exception
     {
         SwingUtilities.invokeAndWait(() ->
         {
-            List<Integer> switched = new ArrayList<>();
-            ProfilerPanel panel = new ProfilerPanel((id, enabled) ->
-            {
-                assertFalse(enabled);
-                switched.add(id);
-            }, false, ignored -> {});
-            ProfilerPlugin.Entry alpha = new ProfilerPlugin.Entry(1, "Alpha", true, true, false);
-            ProfilerPlugin.Entry beta = new ProfilerPlugin.Entry(2, "Beta", true, true, false);
+            ProfilerPanel panel = new ProfilerPanel(false, ignored -> {});
+            ProfilerPlugin.Entry alpha = new ProfilerPlugin.Entry(1, "Alpha", true, true);
+            ProfilerPlugin.Entry beta = new ProfilerPlugin.Entry(2, "Beta", true, true);
             panel.setRoster(List.of(alpha, beta));
             SampleHistory history = new SampleHistory();
             OwnershipIndex roster = SampleHistoryTest.roster();
@@ -51,8 +46,7 @@ public class ProfilerPanelTest
             panel.setRoster(List.of(beta, alpha));
             mode.setSelectedIndex(2);
             assertEquals("Session", mode.getSelectedItem().toString());
-            table.getActionMap().get("switchPlugin").actionPerformed(new ActionEvent(table, 0, "space"));
-            assertEquals(List.of(1), switched);
+            assertEquals("Alpha", table.getValueAt(table.getSelectedRow(), 0));
             mode.setSelectedIndex(1);
             assertEquals("Slow-frame lift · 5 min", mode.getSelectedItem().toString());
             assertEquals("Δ pp", table.getColumnModel().getColumn(1).getHeaderValue());
@@ -62,6 +56,46 @@ public class ProfilerPanelTest
         });
     }
 
+    @Test public void statusIsReadOnlyAndSortsOnHeaderClicksAndRosterChanges() throws Exception
+    {
+        SwingUtilities.invokeAndWait(() ->
+        {
+            ProfilerPanel panel = new ProfilerPanel(false, ignored -> {});
+            // An enabled plugin can be inactive. The visible column follows its configured state.
+            panel.setRoster(List.of(new ProfilerPlugin.Entry(1, "Alpha", true, false),
+                new ProfilerPlugin.Entry(2, "Beta", false, false)));
+            List<Component> controls = new ArrayList<>();
+            collect(panel, controls);
+            JTable table = (JTable) controls.stream().filter(c -> c instanceof JTable).findFirst().orElseThrow();
+            table.setSize(225, 200);
+            table.doLayout();
+            table.getTableHeader().setSize(table.getWidth(), 20);
+            int x = table.getTableHeader().getHeaderRect(2).x + 5;
+            assertEquals("Status", table.getColumnName(2));
+            assertEquals("On", statusText(table, 0));
+            assertEquals("Off", statusText(table, 1));
+            click(table, x);
+            assertFalse(table.editCellAt(0, 2));
+            assertEquals("On", statusText(table, 0));
+
+            click(table.getTableHeader(), x);
+            assertEquals("Beta", table.getValueAt(0, 0));
+            click(table.getTableHeader(), x);
+            assertEquals("Alpha", table.getValueAt(0, 0));
+            panel.setRoster(List.of(new ProfilerPlugin.Entry(1, "Alpha", false, false),
+                new ProfilerPlugin.Entry(2, "Beta", true, true)));
+            assertEquals("Beta", table.getValueAt(0, 0));
+            assertEquals("On", statusText(table, 0));
+            assertEquals("Off", statusText(table, 1));
+        });
+    }
+
+    private static String statusText(JTable table, int row)
+    {
+        JLabel label = (JLabel) table.prepareRenderer(table.getCellRenderer(row, 2), row, 2);
+        return label.getText();
+    }
+
     @Test public void filterHasItsOwnLineAndSelectingRowsKeepsFullHeight() throws Exception
     {
         SwingUtilities.invokeAndWait(() ->
@@ -69,11 +103,10 @@ public class ProfilerPanelTest
             boolean initial = new ProfilerConfig() {}.hideZeroUsage();
             assertFalse(initial);
             List<Boolean> persisted = new ArrayList<>();
-            List<Integer> switched = new ArrayList<>();
-            ProfilerPanel panel = new ProfilerPanel((id, on) -> switched.add(id), initial, persisted::add);
+            ProfilerPanel panel = new ProfilerPanel(initial, persisted::add);
             panel.setSize(225, 600);
-            ProfilerPlugin.Entry alpha = new ProfilerPlugin.Entry(1, "Alpha", true, true, false);
-            ProfilerPlugin.Entry beta = new ProfilerPlugin.Entry(2, "Beta", true, true, false);
+            ProfilerPlugin.Entry alpha = new ProfilerPlugin.Entry(1, "Alpha", true, true);
+            ProfilerPlugin.Entry beta = new ProfilerPlugin.Entry(2, "Beta", true, true);
             panel.setRoster(List.of(alpha, beta));
             List<Component> controls = new ArrayList<>();
             collect(panel, controls);
@@ -99,23 +132,20 @@ public class ProfilerPanelTest
             assertEquals(50.0, (Double) table.getValueAt(0, 1), 0.001);
             table.setSize(210, 200);
             table.doLayout();
-            clickFirstRow(table, 5);
+            click(table, 5);
             panel.doLayout();
             assertEquals(full, list.getHeight());
             assertEquals("Alpha", table.getValueAt(table.getSelectedRow(), 0));
             assertFalse(controls.stream().anyMatch(c -> c instanceof JTextArea && ((JTextArea)c).getText().contains("demo.AlphaPlugin.work")));
-            clickFirstRow(table, 5);
+            click(table, 5);
             panel.doLayout();
             assertEquals(full, list.getHeight());
-            assertTrue(switched.isEmpty());
-            clickFirstRow(table, table.getCellRect(0, 2, true).x + 5);
-            assertEquals(List.of(1), switched);
             hide.doClick();
             assertEquals(1, table.getRowCount());
             hide.doClick();
             assertEquals(2, table.getRowCount());
             assertEquals(List.of(true, false), persisted);
-            panel.setRoster(List.of(new ProfilerPlugin.Entry(1, "Alpha", false, false, false), beta));
+            panel.setRoster(List.of(new ProfilerPlugin.Entry(1, "Alpha", false, false), beta));
             assertEquals("Beta", table.getValueAt(0, 0));
             table.getRowSorter().toggleSortOrder(1);
             table.getRowSorter().toggleSortOrder(1);
@@ -153,11 +183,11 @@ public class ProfilerPanelTest
         assertTrue(session.beginPanelUpdate(67 * second));
     }
 
-    private static void clickFirstRow(JTable table, int x)
+    private static void click(Component target, int x)
     {
-        // Exercise the sidebar's mouse handler in an isolated Swing table.
-        table.dispatchEvent(new MouseEvent(table, MouseEvent.MOUSE_PRESSED, 1, 0, x, 6, 1, false, MouseEvent.BUTTON1));
-        table.dispatchEvent(new MouseEvent(table, MouseEvent.MOUSE_RELEASED, 2, 0, x, 6, 1, false, MouseEvent.BUTTON1));
+        target.dispatchEvent(new MouseEvent(target, MouseEvent.MOUSE_PRESSED, 1, 0, x, 6, 1, false, MouseEvent.BUTTON1));
+        target.dispatchEvent(new MouseEvent(target, MouseEvent.MOUSE_RELEASED, 2, 0, x, 6, 1, false, MouseEvent.BUTTON1));
+        target.dispatchEvent(new MouseEvent(target, MouseEvent.MOUSE_CLICKED, 3, 0, x, 6, 1, false, MouseEvent.BUTTON1));
     }
 
     private static void collect(Container parent, List<Component> controls)
